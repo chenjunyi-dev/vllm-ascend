@@ -191,6 +191,7 @@ std::tuple<at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &> mla_preproces
     
     auto [workspace_tensor, tiling, block_dim] = mlapo::mla_preprocess_tiling(
         hiddenState,
+        wdqkv,
         wuk,
         cache_mode,
         quant_mode

@@ -93,6 +93,8 @@ struct MlaTilingData {
 
     // hidden state dimension
     uint32_t hiddenStateDim{7168};
+
+    uint32_t isWeightQuantized{1};
 };
 
 #endif  // MLAPREPROCESS_TILING_H

@@ -122,6 +122,7 @@ struct PlatformInfo {
 };
 
 struct OpParam {
+    uint32_t isWeightQuantized;
     uint32_t hiddenStateDim;
     uint32_t N;
     uint32_t headNum;
@@ -554,8 +555,10 @@ void MlaPreprocessTiling::Init()
     tilingData->numCore = platformInfo.coreNumAic;
     tilingData->n = opParam.N;
     tilingData->hiddenStateDim = opParam.hiddenStateDim;
+    tilingData->isWeightQuantized = opParam.isWeightQuantized;
+    bool enDequant = (opParam.isWeightQuantized == 1);
     bool deqOnTheFly = false;
-    if (opParam.inDtype == at::kBFloat16 || opParam.quantMode == QuantMode::PER_TOKEN_SYMM_QUANT) {
+    if (enDequant && (opParam.inDtype == at::kBFloat16 || opParam.quantMode == QuantMode::PER_TOKEN_SYMM_QUANT)) {
         deqOnTheFly = true;
     }
 
@@ -566,7 +569,7 @@ void MlaPreprocessTiling::Init()
                                    HIDDEN_STRATE_MM,        // n
                                    false,                   // transA
                                    true,                    // transB
-                                   true,                    // enDequant
+                                   enDequant,               // enDequant
                                    deqOnTheFly);            // in bf16.cce?
     mm1TilingApi.GetTilingData(tilingData->mm1);
 
@@ -577,7 +580,7 @@ void MlaPreprocessTiling::Init()
                                    opParam.headNum * HIDDEN_STRATE_ROPE,  // n
                                    false,                                 // transA
                                    true,                                  // transB
-                                   true,                                  // enDequant
+                                   enDequant,                             // enDequant
                                    deqOnTheFly);                          // in bf16.cce?
     mm2TilingApi.GetTilingData(tilingData->mm2);
 
@@ -632,6 +635,7 @@ inline int get_op_mode(const MapType &mode_map, c10::optional<c10::string_view> 
 //     at::Tensor &kv_cache_out0, at::Tensor &q_out1, at::Tensor &kv_cache_out1)
 std::tuple<at::Tensor, at::Tensor, uint32_t> mla_preprocess_tiling(
     const at::Tensor &hiddenState,
+    const at::Tensor &wdqkv,
     const at::Tensor &wuk,
     c10::optional<c10::string_view> cache_mode,
     c10::optional<c10::string_view> quant_mode
@@ -664,6 +668,11 @@ std::tuple<at::Tensor, at::Tensor, uint32_t> mla_preprocess_tiling(
     opParam.cacheMode = static_cast<int32_t>(cacheMode);
     opParam.quantMode = static_cast<QuantMode>(quantMode);
     opParam.inDtype = hiddenState.options().dtype();
+    if (wdqkv.options().dtype() == at::kBFloat16 || wdqkv.options().dtype() == at::kHalf) {
+        opParam.isWeightQuantized = 0;
+    } else {
+        opParam.isWeightQuantized = 1;
+    }
 
     MlaTilingData tilingData;
     MlaPreprocessTiling mlaTiling(platformInfo, opParam, &tilingData);
